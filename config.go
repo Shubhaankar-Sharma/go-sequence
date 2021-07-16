@@ -1,12 +1,19 @@
 package sequence
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"math/big"
 	"sort"
 
 	"github.com/0xsequence/ethkit/ethcoder"
+	"github.com/0xsequence/ethkit/ethrpc"
+	"github.com/0xsequence/ethkit/go-ethereum/accounts/abi/bind"
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
+	"github.com/0xsequence/go-sequence/contracts/gen/walletupgradable"
+	"github.com/0xsequence/go-sequence/contracts/gen/walletutils"
 )
 
 type WalletConfig struct {
@@ -95,6 +102,198 @@ func ImageHashOfWalletConfigBytes(walletConfig WalletConfig) ([]byte, error) {
 	}
 
 	return imageHash, nil
+}
+
+func FindCurrentConfig(ctx context.Context, address common.Address, provider, authProvider *ethrpc.Provider, walletContext *WalletContext, knownConfigs []*WalletConfig, ignoreIndex, requireIndex bool) (*WalletConfig, error) {
+	if requireIndex && ignoreIndex {
+		return nil, fmt.Errorf("findCurrentConfig: can't ignore index and require index")
+	}
+
+	imageHash, config, err := FindCurrentImageHash(ctx, walletContext, provider, authProvider, address, knownConfigs)
+	if err != nil {
+		return nil, err
+	}
+	if config != nil {
+		knownConfigs = append([]*WalletConfig{config}, knownConfigs...)
+	}
+
+	config, err = FindConfigForImageHash(ctx, walletContext, imageHash, authProvider, knownConfigs)
+	if err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+func FindLastWalletOfInitialSigner(ctx context.Context, signer common.Address, provider, authProvider *ethrpc.Provider, walletContext *WalletContext, knownConfigs []*WalletConfig, ignoreIndex, requireIndex bool) (common.Address, error) {
+	if requireIndex && ignoreIndex {
+		return common.Address{}, fmt.Errorf("findCurrentConfig: can't ignore index and require index")
+	}
+
+	authContract, err := walletutils.NewWalletUtils(walletContext.UtilsAddress, authProvider)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	logBlockHeight := big.NewInt(0)
+	if !ignoreIndex {
+		block, err := authContract.LastSignerUpdate(&bind.CallOpts{Context: ctx}, signer)
+		if err != nil {
+			return common.Address{}, err
+		}
+		logBlockHeight.Set(block)
+	}
+	if requireIndex && logBlockHeight.Sign() == 0 {
+		return common.Address{}, fmt.Errorf("no lastSignerUpdate for %v", signer)
+	}
+
+	var endBlockHeight *uint64
+	if logBlockHeight.Sign() != 0 {
+		endBlockHeight = new(uint64)
+		*endBlockHeight = logBlockHeight.Uint64()
+	}
+	logs, err := authContract.FilterRequiredSigner(&bind.FilterOpts{
+		Start:   logBlockHeight.Uint64(),
+		End:     endBlockHeight,
+		Context: ctx,
+	}, nil, []common.Address{signer})
+	if err != nil {
+		return common.Address{}, err
+	}
+	lastLog := logs.Event
+	for logs.Next() {
+		lastLog = logs.Event
+	}
+	if lastLog == nil {
+		return common.Address{}, fmt.Errorf("publishConfig: wallet config last log not found")
+	}
+	return lastLog.Wallet, nil
+}
+
+func FindConfigForImageHash(ctx context.Context, walletContext *WalletContext, image common.Hash, authProvider *ethrpc.Provider, knownConfigs []*WalletConfig) (*WalletConfig, error) {
+	for _, kc := range knownConfigs {
+		imageHash, err := ImageHashOfWalletConfigBytes(*kc)
+		if err != nil {
+			return nil, err
+		}
+		if bytes.Equal(imageHash, image[:]) {
+			return kc, nil
+		}
+	}
+
+	authContract, err := walletutils.NewWalletUtils(walletContext.UtilsAddress, authProvider)
+	if err != nil {
+		return nil, err
+	}
+
+	imageHashHeight, err := authContract.LastImageHashUpdate(&bind.CallOpts{Context: ctx}, image)
+	if err != nil {
+		return nil, err
+	}
+
+	var endBlockHeight *uint64
+	if imageHashHeight.Sign() != 0 {
+		endBlockHeight = new(uint64)
+		*endBlockHeight = imageHashHeight.Uint64()
+	}
+	logs, err := authContract.FilterRequiredConfig(&bind.FilterOpts{
+		Start:   imageHashHeight.Uint64(),
+		End:     endBlockHeight,
+		Context: ctx,
+	}, nil, [][32]byte{image})
+	if err != nil {
+		return nil, err
+	}
+	lastLog := logs.Event
+	for logs.Next() {
+		lastLog = logs.Event
+	}
+	if lastLog == nil {
+		return nil, fmt.Errorf("publishConfig: wallet config last log not found")
+	}
+
+	return decodeRequiredConfig(lastLog)
+}
+
+func FindCurrentImageHash(ctx context.Context, walletContext *WalletContext, provider, authProvider *ethrpc.Provider, address common.Address, knownConfigs []*WalletConfig) (common.Hash, *WalletConfig, error) {
+	walletContract, err := walletupgradable.NewWalletUpgradable(address, provider)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+
+	currentImageHash, err := walletContract.ImageHash(&bind.CallOpts{Context: ctx})
+	if err == nil {
+		return currentImageHash, nil, nil
+	}
+
+	for _, kc := range knownConfigs {
+		walletAddress, err := AddressFromWalletConfig(*kc, *walletContext)
+		if err != nil {
+			return common.Hash{}, nil, err
+		}
+		if walletAddress == address {
+			imageHash, err := ImageHashOfWalletConfigBytes(*kc)
+			if err != nil {
+				return common.Hash{}, nil, err
+			}
+			return common.BytesToHash(imageHash), kc, nil
+		}
+	}
+
+	authContract, err := walletutils.NewWalletUtils(walletContext.UtilsAddress, authProvider)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+
+	knownImageHash, err := authContract.KnownImageHashes(&bind.CallOpts{Context: ctx}, address)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+
+	if knownImageHash != (common.Hash{}) {
+		walletAddress, err := AddressFromImageHash(common.Bytes2Hex(knownImageHash[:]), *walletContext)
+		if err != nil {
+			return common.Hash{}, nil, err
+		}
+		if walletAddress != address {
+			return common.Hash{}, nil, fmt.Errorf("findCurrentImageHash: inconsistent RequireUtils results")
+		}
+		return knownImageHash, nil, nil
+	}
+
+	logs, err := authContract.FilterRequiredConfig(&bind.FilterOpts{Context: ctx}, []common.Address{address}, nil)
+	if err != nil {
+		return common.Hash{}, nil, err
+	}
+	if logs.Next() {
+		config, err := decodeRequiredConfig(logs.Event)
+		if err != nil {
+			return common.Hash{}, nil, err
+		}
+
+		gotImageHash, err := ImageHashOfWalletConfigBytes(*config)
+		if err != nil {
+			return common.Hash{}, nil, err
+		}
+
+		walletAddress, err := AddressFromImageHash(common.Bytes2Hex(gotImageHash), *walletContext)
+		if err != nil {
+			return common.Hash{}, nil, err
+		}
+		if walletAddress != address {
+			return common.Hash{}, nil, fmt.Errorf("findCurrentImageHash: inconsistent RequireUtils results")
+		}
+		return common.BytesToHash(gotImageHash), config, nil
+	} else {
+		return common.Hash{}, nil, fmt.Errorf("counterfactual image hash not found")
+	}
+}
+
+func decodeRequiredConfig(event *walletutils.WalletUtilsRequiredConfig) (*WalletConfig, error) {
+	// TODO
+	return &WalletConfig{
+		Threshold: uint16(event.Threshold.Uint64()),
+	}, nil
 }
 
 func SortWalletConfig(walletConfig WalletConfig) error {
