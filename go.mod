@@ -10,4 +10,5 @@ require (
 	github.com/rs/zerolog v1.23.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/crypto v0.0.0-20210513164829-c07d793c2f9a // indirect
+	golang.org/x/sys v0.0.0-20210510120138-977fb7262007 // indirect
 )

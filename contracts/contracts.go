@@ -43,13 +43,13 @@ var (
 )
 
 func init() {
-	WalletFactory = artifact("WALLET_FACTORY", walletfactory.WalletFactoryABI, walletfactory.WalletFactoryBin)
-	WalletMainModule = artifact("WALLET_MAIN", walletmain.WalletMainABI, walletmain.WalletMainBin)
-	WalletMainModuleUpgradable = artifact("WALLET_UPGRADABLE", walletupgradable.WalletUpgradableABI, walletupgradable.WalletUpgradableBin)
-	WalletGuestModule = artifact("WALLET_GUEST", walletguest.WalletGuestABI, walletguest.WalletGuestBin)
-	WalletUtils = artifact("WALLET_UTILS", walletutils.WalletUtilsABI, walletutils.WalletUtilsBin)
-	WalletGasEstimator = artifact("WALLET_GAS_ESTIMATOR", walletgasestimator.WalletGasEstimatorABI, walletgasestimator.WalletGasEstimatorBin, walletgasestimator.WalletGasEstimatorDeployedBin)
-	GasEstimator = artifact("GAS_ESTIMATOR", gasestimator.GasEstimatorABI, gasestimator.GasEstimatorBin, gasestimator.GasEstimatorDeployedBin)
+	WalletFactory = artifact("WALLET_FACTORY", walletfactory.WalletFactoryMetaData.ABI, walletfactory.WalletFactoryMetaData.Bin)
+	WalletMainModule = artifact("WALLET_MAIN", walletmain.WalletMainMetaData.ABI, walletmain.WalletMainMetaData.Bin)
+	WalletMainModuleUpgradable = artifact("WALLET_UPGRADABLE", walletupgradable.WalletUpgradableMetaData.ABI, walletupgradable.WalletUpgradableMetaData.Bin)
+	WalletGuestModule = artifact("WALLET_GUEST", walletguest.WalletGuestMetaData.ABI, walletguest.WalletGuestMetaData.Bin)
+	WalletUtils = artifact("WALLET_UTILS", walletutils.WalletUtilsMetaData.ABI, walletutils.WalletUtilsMetaData.Bin)
+	WalletGasEstimator = artifact("WALLET_GAS_ESTIMATOR", walletgasestimator.WalletGasEstimatorMetaData.ABI, walletgasestimator.WalletGasEstimatorMetaData.Bin, walletgasestimator.WalletGasEstimatorDeployedBin)
+	GasEstimator = artifact("GAS_ESTIMATOR", gasestimator.GasEstimatorMetaData.ABI, gasestimator.GasEstimatorMetaData.Bin, gasestimator.GasEstimatorDeployedBin)
 
 	IERC1271 = artifact("IERC1271", ierc1271.IERC1271ABI, "")
 
@@ -57,9 +57,9 @@ func init() {
 	IERC721 = artifact("IERC721", tokens.IERC721ABI, "")
 	IERC1155 = artifact("IERC1155", tokens.IERC1155ABI, "")
 
-	NiftyswapExchange = artifact("NIFTYSWAP_EXCHANGE", niftyswap.NiftyswapExchangeABI, niftyswap.NiftyswapFactoryBin)
-	NiftyswapFactory = artifact("NIFTYSWAP_FACTORY", niftyswap.NiftyswapFactoryABI, niftyswap.NiftyswapFactoryBin)
-	WrapAndNiftyswap = artifact("WRAP_AND_NIFTYSWAP", niftyswap.WrapAndNiftyswapABI, niftyswap.WrapAndNiftyswapBin)
+	NiftyswapExchange = artifact("NIFTYSWAP_EXCHANGE", niftyswap.NiftyswapFactoryMetaData.ABI, niftyswap.NiftyswapFactoryMetaData.Bin)
+	NiftyswapFactory = artifact("NIFTYSWAP_FACTORY", niftyswap.NiftyswapFactoryMetaData.ABI, niftyswap.NiftyswapFactoryMetaData.Bin)
+	WrapAndNiftyswap = artifact("WRAP_AND_NIFTYSWAP", niftyswap.WrapAndNiftyswapMetaData.ABI, niftyswap.WrapAndNiftyswapMetaData.Bin)
 
 	ERC20Mock = ethartifact.MustParseArtifactJSON(artifact_erc20mock)
 }
